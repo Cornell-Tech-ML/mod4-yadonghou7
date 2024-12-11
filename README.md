@@ -40,12 +40,10 @@ The files that will be synced are:
 
 ## Task 4.5
 
-
-
-`'mnist.txt'`  
+[MNIST File](./mnist.txt)  
  achieve final accuracy of 16/16.
  Epoch 10 loss 1.14911858089626 valid acc 16/16
 
-`'sentiment.txt'` 
+[Sentiment File](./sentiment.txt)  
 Validation accuracy: 67.00%
 Best Valid accuracy: 75.00%
