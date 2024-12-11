@@ -1,3 +1,12 @@
+"""MiniTorch Library - A minimal implementation of the PyTorch library.
+
+This package provides core deep learning operations and abstractions including:
+- Automatic differentiation
+- Tensor operations
+- Neural network modules
+- Optimization algorithms
+"""
+
 from .testing import MathTest, MathTestVariable  # type: ignore # noqa: F401,F403
 from .datasets import *  # noqa: F401,F403
 from .optim import *  # noqa: F401,F403

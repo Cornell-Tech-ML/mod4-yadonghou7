@@ -41,8 +41,7 @@ class Conv2d(minitorch.Module):
         self.bias = RParam(out_channels, 1, 1)
 
     def forward(self, input):
-        # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        return minitorch.conv2d(input, self.weights.value) + self.bias.value
 
 
 class Network(minitorch.Module):
@@ -64,15 +63,27 @@ class Network(minitorch.Module):
         super().__init__()
 
         # For vis
-        self.mid = None
-        self.out = None
 
-        # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        self.conv1 = Conv2d(1, 4, 3, 3)
+        self.conv2 = Conv2d(4, 8, 3, 3)
+        self.lin1 = Linear(392, 64)
+        self.lin2 = Linear(64, C)
 
     def forward(self, x):
-        # TODO: Implement for Task 4.5.
-        raise NotImplementedError("Need to implement for Task 4.5")
+        self.x1 = self.conv1.forward(x).relu()
+        self.x2 = self.conv2.forward(self.x1).relu()
+        x_avg_pool = minitorch.avgpool2d(self.x2, (4, 4))
+        x_avg_pool = x_avg_pool.view(BATCH, 392)
+        x_avg_pool = self.lin1.forward(x_avg_pool).relu()
+
+        # we should only be using dropout on training, not validation
+        if not self.training:
+            # No Dropout
+            x_drop = minitorch.dropout(x_avg_pool, 0.25, True)
+        else:
+            # Dropout
+            x_drop = minitorch.dropout(x_avg_pool, 0.25, False)
+        return minitorch.logsoftmax(self.lin2.forward(x_drop), 1)
 
 
 def make_mnist(start, stop):
@@ -171,4 +182,4 @@ class ImageTrain:
 
 if __name__ == "__main__":
     data_train, data_val = (make_mnist(0, 5000), make_mnist(10000, 10500))
-    ImageTrain().train(data_train, data_val, learning_rate=0.01)
+    ImageTrain().train(data_train, data_val, learning_rate=0.01, max_epochs=25)
