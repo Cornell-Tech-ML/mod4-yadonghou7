@@ -1,4 +1,4 @@
-(.venv) (base) yadonghou@Yadongs-MacBook-Pro mod4-yadonghou7 % python3 project/run_sentiment.py 
+(.venv) (base) yadonghou@Yadongs-MacBook-Pro mod4-yadonghou7 % python3 project/run_sentiment.py
 
 Downloading from http://nlp.stanford.edu/data/glove.6B.zip to /Users/yadonghou/.embeddings/glove/wikipedia_gigaword.zip
 /Users/yadonghou/Documents/workspace/mod4-yadonghou7/.venv/lib/python3.12/site-packages/urllib3/connectionpool.py:1099: InsecureRequestWarning: Unverified HTTPS request is being made to host 'nlp.stanford.edu'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings

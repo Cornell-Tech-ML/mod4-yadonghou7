@@ -7,11 +7,9 @@ from numba import njit as _njit
 from .autodiff import Context
 from .tensor import Tensor
 from .tensor_data import (
-    MAX_DIMS,
     Index,
     Shape,
     Strides,
-    Storage,
     broadcast_index,
     index_to_position,
     to_index,
@@ -22,7 +20,19 @@ Fn = TypeVar("Fn")
 
 
 def njit(fn: Fn, **kwargs: Any) -> Fn:
-    return _njit(inline="always", **kwargs)(fn)  # type: ignore
+    """Just in time compile with NUMBA.
+
+    Args:
+    ----
+        fn: Function to compile
+        kwargs: Compilation options
+
+    Returns:
+    -------
+        Compiled function
+
+    """
+    return _njit(inline="always", **kwargs)(fn)
 
 
 # This code will JIT compile fast versions your tensor_data functions.
@@ -32,12 +42,13 @@ to_index = njit(to_index)
 index_to_position = njit(index_to_position)
 broadcast_index = njit(broadcast_index)
 
+
 def _tensor_conv1d(
     out: Tensor,
     out_shape: Shape,
     out_strides: Strides,
     out_size: int,
-    input: Tensor,
+    input_tensor: Tensor,
     input_shape: Shape,
     input_strides: Strides,
     weight: Tensor,
@@ -46,7 +57,8 @@ def _tensor_conv1d(
     reverse: bool,
 ) -> None:
     """1D Convolution implementation.
-    Given input tensor of..."""
+    Given input tensor of...
+    """
     batch_, out_channels, out_width = out_shape
     batch, in_channels, width = input_shape
     out_channels_, in_channels_, kw = weight_shape
@@ -82,7 +94,7 @@ def _tensor_conv1d(
                             cur_width + index2,
                         )
                         val += (
-                            input[index_to_position(data_index, s1)]
+                            input_tensor[index_to_position(data_index, s1)]
                             * weight[index_to_position(kernel_index, s2)]
                         )
                 else:
@@ -98,24 +110,25 @@ def _tensor_conv1d(
                             cur_width - index2,
                         )
                         val += (
-                            input[index_to_position(data_index, s1)]
+                            input_tensor[index_to_position(data_index, s1)]
                             * weight[index_to_position(kernel_index, s2)]
                         )
 
         out[index_to_position(out_index, out_strides)] = val
+
 
 tensor_conv1d = njit(_tensor_conv1d, parallel=True)
 
 
 class Conv1dFun(Function):
     @staticmethod
-    def forward(ctx: Context, input: Tensor, weight: Tensor) -> Tensor:
+    def forward(ctx: Context, input_tensor: Tensor, weight: Tensor) -> Tensor:
         """Compute a 1D Convolution
 
         Args:
         ----
             ctx : Context
-            input : batch x in_channel x h x w
+            input_tensor : batch x in_channel x h x w
             weight : out_channel x in_channel x kh x kw
 
         Returns:
@@ -123,25 +136,37 @@ class Conv1dFun(Function):
             batch x out_channel x h x w
 
         """
-        ctx.save_for_backward(input, weight)
-        batch, in_channels, w = input.shape
+        ctx.save_for_backward(input_tensor, weight)
+        batch, in_channels, w = input_tensor.shape
         out_channels, in_channels2, kw = weight.shape
         assert in_channels == in_channels2
 
         # Run convolution
-        output = input.zeros((batch, out_channels, w))
+        output = input_tensor.zeros((batch, out_channels, w))
         tensor_conv1d(
-            *output.tuple(), output.size, *input.tuple(), *weight.tuple(), False
+            *output.tuple(), output.size, *input_tensor.tuple(), *weight.tuple(), False
         )
         return output
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
-        input, weight = ctx.saved_values
-        batch, in_channels, w = input.shape
+        """Compute the gradient for 1D convolution.
+
+        Args:
+        ----
+            ctx: Context with saved tensors
+            grad_output: Gradient with respect to output
+
+        Returns:
+        -------
+            Tuple of gradients for input and weight
+
+        """
+        input_tensor, weight = ctx.saved_values
+        batch, in_channels, w = input_tensor.shape
         out_channels, in_channels, kw = weight.shape
         grad_weight = grad_output.zeros((in_channels, out_channels, kw))
-        new_input = input.permute(1, 0, 2)
+        new_input = input_tensor.permute(1, 0, 2)
         new_grad_output = grad_output.permute(1, 0, 2)
         tensor_conv1d(  # type: ignore
             *grad_weight.tuple(),
@@ -152,7 +177,7 @@ class Conv1dFun(Function):
         )
         grad_weight = grad_weight.permute(1, 0, 2)
 
-        grad_input = input.zeros((batch, in_channels, w))
+        grad_input = input_tensor.zeros((batch, in_channels, w))
         new_weight = weight.permute(1, 0, 2)
         tensor_conv1d(  # type: ignore
             *grad_input.tuple(),
@@ -172,7 +197,7 @@ def _tensor_conv2d(
     out_shape: Shape,
     out_strides: Strides,
     out_size: int,
-    input: Tensor,
+    input_tensor: Tensor,
     input_shape: Shape,
     input_strides: Strides,
     weight: Tensor,
@@ -183,7 +208,8 @@ def _tensor_conv2d(
     """2D Convolution implementation.
     Given input tensor of
        `batch, in_channels, height, width`
-    ..."""
+    ...
+    """
     batch_, out_channels, _, _ = out_shape
     batch, in_channels, height, width = input_shape
     out_channels_, in_channels_, kh, kw = weight_shape
@@ -224,7 +250,7 @@ def _tensor_conv2d(
                         if cur_height + h < height and cur_width + w < width:
                             val += (
                                 weight[index_to_position(weight_index, s2)]
-                                * input[index_to_position(in_index, s1)]
+                                * input_tensor[index_to_position(in_index, s1)]
                             )
                     else:
                         (
@@ -242,7 +268,7 @@ def _tensor_conv2d(
                         if cur_height - h >= 0 and cur_width - w >= 0:
                             val += (
                                 weight[index_to_position(weight_index, s2)]
-                                * input[index_to_position(in_index, s1)]
+                                * input_tensor[index_to_position(in_index, s1)]
                             )
         out[index_to_position(out_index, out_strides)] = val
 
@@ -252,13 +278,13 @@ tensor_conv2d = njit(_tensor_conv2d, parallel=True, fastmath=True)
 
 class Conv2dFun(Function):
     @staticmethod
-    def forward(ctx: Context, input: Tensor, weight: Tensor) -> Tensor:
+    def forward(ctx: Context, input_tensor: Tensor, weight: Tensor) -> Tensor:
         """Compute a 2D Convolution
 
         Args:
         ----
             ctx : Context
-            input : batch x in_channel x h x w
+            input_tensor : batch x in_channel x h x w
             weight  : out_channel x in_channel x kh x kw
 
         Returns:
@@ -266,24 +292,36 @@ class Conv2dFun(Function):
             (:class:`Tensor`) : batch x out_channel x h x w
 
         """
-        ctx.save_for_backward(input, weight)
-        batch, in_channels, h, w = input.shape
+        ctx.save_for_backward(input_tensor, weight)
+        batch, in_channels, h, w = input_tensor.shape
         out_channels, in_channels2, kh, kw = weight.shape
         assert in_channels == in_channels2
-        output = input.zeros((batch, out_channels, h, w))
+        output = input_tensor.zeros((batch, out_channels, h, w))
         tensor_conv2d(
-            *output.tuple(), output.size, *input.tuple(), *weight.tuple(), False
+            *output.tuple(), output.size, *input_tensor.tuple(), *weight.tuple(), False
         )
         return output
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, Tensor]:
-        input, weight = ctx.saved_values
-        batch, in_channels, h, w = input.shape
+        """Compute the gradient for 2D convolution.
+
+        Args:
+        ----
+            ctx: Context with saved tensors
+            grad_output: Gradient with respect to output
+
+        Returns:
+        -------
+            Tuple of gradients for input and weight
+
+        """
+        input_tensor, weight = ctx.saved_values
+        batch, in_channels, h, w = input_tensor.shape
         out_channels, in_channels, kh, kw = weight.shape
 
         grad_weight = grad_output.zeros((in_channels, out_channels, kh, kw))
-        new_input = input.permute(1, 0, 2, 3)
+        new_input = input_tensor.permute(1, 0, 2, 3)
         new_grad_output = grad_output.permute(1, 0, 2, 3)
         tensor_conv2d(  # type: ignore
             *grad_weight.tuple(),
@@ -294,7 +332,7 @@ class Conv2dFun(Function):
         )
         grad_weight = grad_weight.permute(1, 0, 2, 3)
 
-        grad_input = input.zeros((batch, in_channels, h, w))
+        grad_input = input_tensor.zeros((batch, in_channels, h, w))
         new_weight = weight.permute(1, 0, 2, 3)
         tensor_conv2d(  # type: ignore
             *grad_input.tuple(),

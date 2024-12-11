@@ -7,16 +7,27 @@ from .tensor import Tensor
 from .tensor_functions import Function, rand
 
 
-def tile(input: Tensor, kernel: Tuple[int, int]) -> Tuple[Tensor, int, int]:
+def tile(input_tensor: Tensor, kernel: Tuple[int, int]) -> Tuple[Tensor, int, int]:
+    """Reshape an image tensor for 2D pooling.
 
-    batch, channel, height, width = input.shape
+    Args:
+    ----
+        input_tensor: batch x channel x height x width
+        kernel: height x width of pooling
+
+    Returns:
+    -------
+        Tuple of (reshaped tensor, new_height, new_width)
+
+    """
+    batch, channel, height, width = input_tensor.shape
     kh, kw = kernel
     assert height % kh == 0
     assert width % kw == 0
     new_height: int = height // kh
     new_width: int = width // kw
     res = (
-        input.permute(0, 1, 3, 2)
+        input_tensor.permute(0, 1, 3, 2)
         .contiguous()
         .view(batch, channel, width, new_height, kh)
         .permute(0, 1, 3, 2, 4)
@@ -26,9 +37,21 @@ def tile(input: Tensor, kernel: Tuple[int, int]) -> Tuple[Tensor, int, int]:
     return res, new_height, new_width
 
 
-def avgpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
-    batch, channel, _, _ = input.shape
-    t, _, _ = tile(input, kernel)
+def avgpool2d(input_tensor: Tensor, kernel: Tuple[int, int]) -> Tensor:
+    """Compute 2D average pooling.
+
+    Args:
+    ----
+        input_tensor: batch x channel x height x width
+        kernel: height x width of pooling
+
+    Returns:
+    -------
+        Pooled tensor
+
+    """
+    batch, channel, _, _ = input_tensor.shape
+    t, _, _ = tile(input_tensor, kernel)
     res = t.mean(4).view(batch, channel, t.shape[2], t.shape[3])
     return res
 
@@ -36,55 +59,128 @@ def avgpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
 max_reduce = FastOps.reduce(operators.max, -1e9)
 
 
-def argmax(input: Tensor, dim: int) -> Tensor:
-    out = max_reduce(input, dim)
-    return out == input
+def argmax(input_tensor: Tensor, dim: int) -> Tensor:
+    """Compute the argmax as a 1-hot tensor.
+
+    Args:
+    ----
+        input_tensor: input tensor
+        dim: dimension to apply argmax
+
+    Returns:
+    -------
+        Tensor with 1 on highest cell in dim, 0 otherwise
+
+    """
+    out = max_reduce(input_tensor, dim)
+    return out == input_tensor
 
 
 class Max(Function):
     @staticmethod
-    def forward(ctx: Context, input: Tensor, dim: Tensor) -> Tensor:
-        "Forward of max should be max reduction"
-        max_red = max_reduce(input, int(dim.item()))
-        ctx.save_for_backward(input, max_red)
+    def forward(ctx: Context, input_tensor: Tensor, dim: Tensor) -> Tensor:
+        """Forward of max should be max reduction."""
+        max_red = max_reduce(input_tensor, int(dim.item()))
+        ctx.save_for_backward(input_tensor, max_red)
         return max_red
 
     @staticmethod
     def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, float]:
-        "Backward of max should be argmax (see above)"
-        (input, max_red) = ctx.saved_values
-        return (grad_output * (max_red == input)), 0.0
+        """Backward of max should be argmax (see above)."""
+        (input_tensor, max_red) = ctx.saved_values
+        return (grad_output * (max_red == input_tensor)), 0.0
 
 
-def max(input: Tensor, dim: int) -> Tensor:
-    return Max.apply(input, input._ensure_tensor(dim))
+def max(input_tensor: Tensor, dim: int) -> Tensor:
+    """Compute maximum value along a dimension.
+
+    Args:
+    ----
+        input_tensor: input tensor
+        dim: dimension to reduce
+
+    Returns:
+    -------
+        Tensor with max values
+
+    """
+    return Max.apply(input_tensor, input_tensor._ensure_tensor(dim))
 
 
-def softmax(input: Tensor, dim: int) -> Tensor:
-    m = max(input, dim)
-    t = (input - m).exp()
+def softmax(input_tensor: Tensor, dim: int) -> Tensor:
+    """Compute the softmax as a tensor.
+
+    Args:
+    ----
+        input_tensor: input tensor
+        dim: dimension to apply softmax
+
+    Returns:
+    -------
+        softmax tensor
+
+    """
+    m = max(input_tensor, dim)
+    t = (input_tensor - m).exp()
     s = t.sum(dim)
     return t / s
 
 
-def logsoftmax(input: Tensor, dim: int) -> Tensor:
-    m = max(input, dim)
-    e = (input - m).exp()
+def logsoftmax(input_tensor: Tensor, dim: int) -> Tensor:
+    """Compute the log of the softmax as a tensor.
+
+    Args:
+    ----
+        input_tensor: input tensor
+        dim: dimension to apply log-softmax
+
+    Returns:
+    -------
+        log of softmax tensor
+
+    """
+    m = max(input_tensor, dim)
+    e = (input_tensor - m).exp()
     s = e.sum(dim=dim)
-    return (input - m) - s.log()
+    return (input_tensor - m) - s.log()
 
 
-def maxpool2d(input: Tensor, kernel: Tuple[int, int]) -> Tensor:
-    batch, channel, _, _ = input.shape
-    tiled_input, _, _ = tile(input, kernel)
+def maxpool2d(input_tensor: Tensor, kernel: Tuple[int, int]) -> Tensor:
+    """Tiled max pooling 2D.
+
+    Args:
+    ----
+        input_tensor: batch x channel x height x width
+        kernel: height x width of pooling
+
+    Returns:
+    -------
+        Pooled tensor
+
+    """
+    batch, channel, _, _ = input_tensor.shape
+    tiled_input, _, _ = tile(input_tensor, kernel)
     pooled = max(tiled_input, 4)
     result = pooled.view(batch, channel, pooled.shape[2], pooled.shape[3])
     return result
 
 
-def dropout(input: Tensor, rate: float, ignore: bool = False) -> Tensor:
+def dropout(input_tensor: Tensor, rate: float, ignore: bool = False) -> Tensor:
+    """Dropout positions based on random noise.
+
+    Args:
+    ----
+        input_tensor: input tensor
+        rate: probability [0, 1) of dropping out each position
+        ignore: skip dropout, i.e. do nothing at all
+
+    Returns:
+    -------
+        tensor with random positions dropped out
+
+    """
     if not ignore:
-        random_drop = rand(input.shape) > rate
-        return input * random_drop
+        random_drop = rand(input_tensor.shape) > rate
+        return input_tensor * random_drop
     else:
-        return input
+        return input_tensor
