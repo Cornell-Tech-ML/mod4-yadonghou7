@@ -8,17 +8,17 @@ import numpy as np
 from dataclasses import field
 from .autodiff import Context, Variable, backpropagate, central_difference
 from .scalar_functions import (
+    Inv,
+    Mul,
+    ScalarFunction,
+    Add,
+    Log,
+    Exp,
+    Sigmoid,
+    ReLU,
+    Neg,
     EQ,
     LT,
-    Add,
-    Exp,
-    Inv,
-    Log,
-    Mul,
-    Neg,
-    ReLU,
-    ScalarFunction,
-    Sigmoid,
 )
 
 ScalarLike = Union[float, int, "Scalar"]
@@ -62,6 +62,7 @@ class Scalar:
     derivative: Optional[float] = None
     name: str = field(default="")
     unique_id: int = field(default=0)
+    grad: Optional[float] = None
 
     def __post_init__(self):
         global _var_count
@@ -111,22 +112,25 @@ class Scalar:
         """True if this variable created by the user (no `last_fn`)"""
         return self.history is not None and self.history.last_fn is None
 
-    def is_constant(self) -> bool:
+    def is_constant(self) -> bool:  # noqa: D102
         return self.history is None
 
     @property
-    def parents(self) -> Iterable[Variable]:
-        """Get the variables used to create this one."""
+    def parents(self) -> Iterable[Variable]:  # noqa: D102
         assert self.history is not None
         return self.history.inputs
 
-    def chain_rule(self, d_output: Any) -> Iterable[Tuple[Variable, Any]]:
+    def chain_rule(self, d_output: Any) -> Iterable[Tuple[Variable, Any]]:  # noqa: D102
         h = self.history
         assert h is not None
         assert h.last_fn is not None
         assert h.ctx is not None
 
-        raise NotImplementedError("Need to include this file from past assignment.")
+        # TODO: Implement for Task 1.3.
+        # raise NotImplementedError("Need to implement for Task 1.3")
+        """Chain rule for backpropagation"""
+        x = h.last_fn._backward(h.ctx, d_output)
+        return list(zip(h.inputs, x))
 
     def backward(self, d_output: Optional[float] = None) -> None:
         """Calls autodiff to fill in the derivatives for the history of this object.
@@ -141,10 +145,53 @@ class Scalar:
             d_output = 1.0
         backpropagate(self, d_output)
 
-    raise NotImplementedError("Need to include this file from past assignment.")
+    # TODO: Implement for Task 1.2.
+    # raise NotImplementedError("Need to implement for Task 1.2")
+    def __eq__(self, b: ScalarLike) -> Scalar:
+        """Equal function $f(x, y) = 1 if x == y else 0$"""
+        return EQ.apply(self, b)
+
+    def __lt__(self, b: ScalarLike) -> Scalar:
+        """Less than function $f(x, y) = 1 if x < y else 0$"""
+        return LT.apply(self, b)
+
+    def __gt__(self, b: ScalarLike) -> Scalar:
+        """Greater than function $f(x, y) = 1 if x > y else 0$"""
+        return LT.apply(b, self)
+
+    def __sub__(self, b: ScalarLike) -> Scalar:
+        """Subtraction function $f(x, y) = x - y$"""
+        return self + (-b)
+
+    def __neg__(self) -> Scalar:
+        """Negation function $f(x) = -x$"""
+        return Neg.apply(self)
+
+    def __add__(self, b: ScalarLike) -> Scalar:
+        """Addition function $f(x, y) = x + y$"""
+        return Add.apply(self, b)
+
+    def log(self) -> Scalar:  # noqa: D102
+        r"""Logarithm function $f(x) = \log(x)$"""
+        return Log.apply(self)
+
+    def exp(self) -> Scalar:  # noqa: D102
+        """Exponential function $f(x) = e^x$"""
+        return Exp.apply(self)
+
+    def sigmoid(self) -> Scalar:  # noqa: D102
+        r"""Sigmoid function $f(x) = \frac{1}{1 + e^{-x}}$"""
+        return Sigmoid.apply(self)
+
+    def relu(self) -> Scalar:  # noqa: D102
+        r"""ReLU function $f(x) = \max(0, x)$"""
+        return ReLU.apply(self)
+
+    def __hash__(self):
+        return hash(self.unique_id)
 
 
-def derivative_check(f: Any, *scalars: Scalar) -> None:
+def derivative_check(f: Any, *scalars: Scalar) -> None:  # noqa: D417
     """Checks that autodiff works on a python function.
     Asserts False if derivative is incorrect.
 
