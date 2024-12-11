@@ -1,4 +1,4 @@
-from typing import Tuple, TypeVar, Any
+from typing import Tuple, TypeVar, Any, Callable
 
 import numpy as np
 from numba import prange
@@ -16,7 +16,7 @@ from .tensor_data import (
 )
 from .tensor_functions import Function
 
-Fn = TypeVar("Fn")
+Fn = TypeVar("Fn", bound=Callable[..., Any])
 
 
 def njit(fn: Fn, **kwargs: Any) -> Fn:
@@ -32,7 +32,7 @@ def njit(fn: Fn, **kwargs: Any) -> Fn:
         Compiled function
 
     """
-    return _njit(inline="always", **kwargs)(fn)
+    return _njit(inline="always", **kwargs)(fn)  # type: ignore
 
 
 # This code will JIT compile fast versions your tensor_data functions.
@@ -72,9 +72,9 @@ def _tensor_conv1d(
     s2 = weight_strides
 
     for idx in prange(out_size):
-        out_index: Index = [0] * 3
-        data_index: Index = [0] * 3
-        kernel_index: Index = [0] * 3
+        out_index: Index = np.zeros(3, dtype=np.int32)
+        data_index: Index = np.zeros(3, dtype=np.int32)
+        kernel_index: Index = np.zeros(3, dtype=np.int32)
 
         to_index(idx, out_shape, out_index)
         cur_batch, cur_out_channels, cur_width = out_index
@@ -143,9 +143,14 @@ class Conv1dFun(Function):
 
         # Run convolution
         output = input_tensor.zeros((batch, out_channels, w))
-        tensor_conv1d(
-            *output.tuple(), output.size, *input_tensor.tuple(), *weight.tuple(), False
+        tensor_conv1d(  # type: ignore
+            *output.tuple(),
+            output.size,
+            *input_tensor.tuple(),
+            *weight.tuple(),
+            False,  # type: ignore
         )
+
         return output
 
     @staticmethod
@@ -297,8 +302,12 @@ class Conv2dFun(Function):
         out_channels, in_channels2, kh, kw = weight.shape
         assert in_channels == in_channels2
         output = input_tensor.zeros((batch, out_channels, h, w))
-        tensor_conv2d(
-            *output.tuple(), output.size, *input_tensor.tuple(), *weight.tuple(), False
+        tensor_conv2d(  # type: ignore
+            *output.tuple(),
+            output.size,
+            *input_tensor.tuple(),
+            *weight.tuple(),
+            False,  # type: ignore
         )
         return output
 
